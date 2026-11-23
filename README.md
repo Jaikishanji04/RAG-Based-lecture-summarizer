@@ -1,39 +1,49 @@
-# RAG-Based Smart Lecture Summarizer & Adaptive Quiz System
+# StudyMatrix RAG — Smart Lecture Summarizer & Autonomous Inbox Agent
 
-A modular Streamlit application for turning lecture videos, audio, PDFs, PowerPoint files, and YouTube URLs into searchable study material. It uses pretrained models only:
+A modular AI study application combining Hybrid RAG (Dense ChromaDB + Sparse BM25 + Cross-Encoder reranking) with an autonomous **Model Context Protocol (MCP)** agent for email summarization, assignment tracking, and study synthesis.
 
-- faster-whisper for timestamped speech transcription
-- `BAAI/bge-small-en-v1.5` for dense embeddings
-- BM25 plus ChromaDB for hybrid retrieval
-- `cross-encoder/ms-marco-MiniLM-L-6-v2` for reranking
-- Ollama `llama3` by default for grounded generation
+Powered by **Hugging Face Inference Providers** (no local Ollama server required):
+- Speech transcription: `faster-whisper` with FFmpeg preprocessing
+- Dense embeddings: `BAAI/bge-small-en-v1.5` (or configurable via `HF_EMBED_MODEL`)
+- Lexical search: `rank-bm25`
+- Reranking: `cross-encoder/ms-marco-MiniLM-L-6-v2`
+- Chat & Tool-Calling LLM: `Qwen/Qwen2.5-7B-Instruct` (or configurable via `HF_CHAT_MODEL`)
+- Email & Task Tool Integration: Model Context Protocol (MCP) with read-only Gmail OAuth
+
+---
 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    A[Upload or YouTube URL] --> B[Ingestion]
-    B --> C{Source type}
-    C -->|Audio or video| D[FFmpeg + faster-whisper]
-    C -->|PDF or PPTX| E[PyMuPDF or python-pptx]
-    D --> F[Timestamped transcript]
-    E --> G[Slide or page text]
-    F --> H[Topic-aware chunking]
-    G --> H
-    H --> I[Sentence-transformer embeddings]
-    H --> J[BM25 tokens]
-    I --> K[Persistent ChromaDB]
-    J --> L[Hybrid retrieval]
-    K --> L
-    L --> M[Cross-encoder reranker]
-    M --> N[Ollama or OpenAI LLM]
-    N --> O[Summary, quiz, Q&A, concepts]
-    O --> P[Streamlit pages and exports]
+flowchart TD
+    User[User Prompt / Goal] --> Agent[Autonomous Academic Agent]
+    Agent --> Router{Action Choice}
+    Router -->|Gmail Tool| MCP[Gmail MCP Client - Read-Only]
+    Router -->|Lecture Tool| Retriever[Hybrid Retriever]
+    Router -->|Flashcard Tool| Deck[Flashcard Generator]
+    
+    Retriever --> Chroma[ChromaDB Dense Vectors]
+    Retriever --> BM25[BM25 Lexical Index]
+    Chroma --> RRF[Reciprocal Rank Fusion]
+    BM25 --> RRF
+    RRF --> Reranker[Cross-Encoder Reranker]
+    
+    MCP --> Gmail[Gmail API - Strict Readonly]
+    
+    Reranker --> LLM[Hugging Face Inference Provider]
+    Gmail --> Sanitizer[Anti-Injection Sanitizer]
+    Sanitizer --> LLM
+    Deck --> LLM
+    LLM --> Stream[Step-by-Step Execution Trace & Output]
 ```
 
-## Windows Setup
+---
 
-Open PowerShell in this folder. Python 3.11 or newer, FFmpeg, Ollama, and Git are supported on Windows 11.
+## Getting Started
+
+### 1. Environment Setup
+
+Open PowerShell or terminal in the project folder:
 
 ```powershell
 py -3 -m venv .venv
@@ -43,89 +53,84 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-If PowerShell blocks activation for the current user, run PowerShell once with the following command, then activate again:
+### 2. Configure Hugging Face Token (`HF_TOKEN`)
+1. Create a free account at [huggingface.co](https://huggingface.co).
+2. Go to **Settings** → **Access Tokens**: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
+3. Click **Create new token**, choose type **Read**, and copy the token.
+4. Open `.env` and paste your token:
+   ```env
+   HF_TOKEN=hf_your_token_here
+   HF_CHAT_MODEL=Qwen/Qwen2.5-7B-Instruct
+   HF_EMBED_MODEL=BAAI/bge-small-en-v1.5
+   ```
 
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
+### 3. Setting Up Gmail MCP (Google OAuth)
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a new project (e.g. `StudyMatrix-Assistant`).
+3. Under **APIs & Services** → **Library**, search for and enable the **Gmail API**.
+4. Under **APIs & Services** → **OAuth consent screen**:
+   * User Type: **External**
+   * Add your Google account as a **Test User**.
+5. Under **APIs & Services** → **Credentials**:
+   * Click **Create Credentials** → **OAuth Client ID**.
+   * Application type: **Desktop app**.
+   * Download the JSON file and save it in the project root directory as **`credentials.json`**.
+6. On the first run of the Inbox Agent, StudyMatrix will open a browser window for a one-time consent approval requesting strictly read-only scopes (`gmail.readonly`). Tokens are cached locally in `token.json` (protected by `.gitignore`).
 
-Start Ollama and pull a model:
+---
 
-```powershell
-ollama pull llama3
-```
+## Running the Application
 
-For a lower-memory machine, use an installed smaller model in `.env`:
-
-```text
-OLLAMA_MODEL=llama3.2:3b
-```
-
-The first lecture processing run also downloads the Whisper, embedding, and reranker models from Hugging Face. CPU defaults are Whisper `base` with `int8`; set `WHISPER_DEVICE=auto` to use CUDA when available.
-
-## Run
-
+### Option A: Streamlit All-in-One Dashboard
 ```powershell
 streamlit run app.py
 ```
+Streamlit discovers the 8 interactive pages:
+1. **Upload and Process**: Transcribe and index video, audio, PDFs, and YouTube links.
+2. **Lecture Player**: Jump to timestamps, inspect transcripts, and read hierarchical summaries.
+3. **Quiz**: Generate adaptive MCQ, True/False, Fill-in, and Open-ended questions.
+4. **Ask Lecture Q&A**: Grounded Q&A with verifiable timestamp citations.
+5. **Concept Graph**: Interactive NetworkX knowledge graph.
+6. **Export**: Export summaries and quizzes to Markdown, PDF, CSV, and Anki decks.
+7. **Evaluation**: RAGAS evaluation (faithfulness, context precision, context recall).
+8. **Inbox Agent**: Autonomous agent connecting Gmail and lecture notes with step-by-step traces.
 
-Streamlit automatically discovers the pages in `pages/`:
-
-1. **Upload and Process**: upload media, PDF, PPTX, or paste a YouTube URL. Completed sources are cached by SHA-256 fingerprint.
-2. **Lecture Player**: play media, jump from transcript timestamps, and generate hierarchical summaries.
-3. **Quiz**: create MCQ, true/false, fill-in, and open-ended quizzes with difficulty and Bloom-level controls. Missed concepts are emphasized in the next quiz.
-4. **Ask Lecture Q&A**: ask grounded questions and jump from citations to the player.
-5. **Concept Graph**: extract concepts, inspect graph relationships, generate a mini-quiz, and ask concept-specific questions.
-6. **Export**: download Markdown/PDF summaries and Anki packages. CSV is used when Genanki is unavailable.
-7. **Evaluation**: evaluate an uploaded or cached-quiz Q&A set with RAGAS faithfulness, context precision, and context recall.
-
-## Sample Test Flow
-
-For a quick end-to-end test, use a public educational video around five minutes long or a local five-minute `.mp4`/`.mp3`. In **Upload and Process**, paste the URL or upload the file and click **Process lecture**. Wait for transcription, chunking, and indexing to finish. Then open Lecture Player, generate a summary, ask a question in Q&A, and generate a three-question quiz.
-
-The first run may take several minutes because pretrained models are downloaded and loaded. Later runs reuse the local cache under `data/`.
-
-## Configuration
-
-Copy [.env.example](.env.example) to `.env` and adjust:
-
-- `LLM_PROVIDER`: `ollama` or `openai`
-- `OLLAMA_BASE_URL`, `OLLAMA_MODEL`: local Ollama endpoint and model
-- `OPENAI_API_KEY`, `OPENAI_MODEL`: used only with the OpenAI provider
-- `WHISPER_MODEL_SIZE`, `WHISPER_DEVICE`, and compute types
-- `EMBEDDING_MODEL` and `RERANKER_MODEL`
-- `YTDLP_COOKIES_FROM_BROWSER`: optional browser name such as `chrome` or `edge` for YouTube videos requiring sign-in
-
-Do not commit `.env`, uploaded media, model caches, or generated Chroma data.
-
-If YouTube reports that you are not a bot, close the browser that is signed into YouTube, set `YTDLP_COOKIES_FROM_BROWSER=chrome` or `edge` in `.env`, restart Streamlit, and retry. Some videos cannot be downloaded without browser authentication; a local MP3 or MP4 upload is the reliable fallback.
-
-## Project Layout
-
-```text
-app.py                         Streamlit entry point
-pages/                         Multipage Streamlit UI
-core/                          Reusable ingestion, RAG, LLM, and export services
-data/                          Lecture registry, uploads, indexes, and generated artifacts
-tests/                         Focused unit and schema tests
-requirements.txt               Python dependencies
-```
-
-All LLM JSON boundaries use Pydantic validation and retry invalid responses up to three times. Core services do not depend on Streamlit, so they can be wrapped by FastAPI later.
-
-## Tests
-
-Run the complete local test suite:
-
+### Option B: FastAPI Backend + React Frontend
+To run the REST & Streaming API for the React frontend:
 ```powershell
-pytest -q
+py server.py
 ```
+FastAPI runs at `http://localhost:8000`:
+- `POST /agent/run` & `POST /agent/run/stream`: Execute agent goals.
+- `GET /agent/tools`: View exposed tool definitions.
+- `GET /agent/status`: View connection health for HF and Gmail.
+- `GET /lectures`: View indexed lecture repository.
 
-The Ollama smoke test is skipped when Ollama or the configured model is unavailable. To run it against a model that is installed locally:
+---
 
+## Re-indexing Collections
+If you change your embedding model (`HF_EMBED_MODEL` in `.env`), run the re-indexing script to regenerate dense vector representations in ChromaDB:
 ```powershell
-$env:OLLAMA_MODEL = "llama3.2:3b"
-pytest tests/test_llm.py -q
+py scripts/reindex.py
 ```
 
-RAGAS evaluation is an optional runtime workflow and requires its dependencies from `requirements.txt` plus a configured evaluation-capable model/provider.
+---
+
+## Testing
+Run the test suite:
+```powershell
+py -m pytest
+```
+Testing covers:
+- Chunking boundary and overlap logic (`test_chunking.py`)
+- Knowledge graph co-occurrence edges (`test_concepts.py`)
+- Hugging Face provider abstraction and tool-calling (`test_llm.py`)
+- Autonomous Agent ReAct loop and prompt injection escaping (`test_agent.py`)
+- Grounded citation validation and RRF fusion (`test_qa.py`, `test_retrieval.py`, `test_summary.py`)
+
+---
+
+## Security & Privacy Rules
+- **Untrusted Email Delimiters:** Email text is parsed and wrapped in `<untrusted_email>` blocks. The agent model is instructed to treat all content strictly as passive reference data, preventing prompt injection attacks.
+- **Strict Read-Only Scopes:** The application only ever requests `gmail.readonly` permission. It cannot compose, delete, or modify any emails.
+- **Zero Secret Commits:** `.gitignore` excludes `.env`, `credentials.json`, `token.json`, and all downloaded video/audio assets.
