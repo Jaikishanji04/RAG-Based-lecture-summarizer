@@ -20,6 +20,7 @@ NAVIGATION = {
     ],
     "OUTPUT": [("Export", "pages/6_Export.py", "06")],
     "QUALITY": [("Evaluation", "pages/7_Evaluation.py", "07")],
+    "AGENT": [("Inbox Agent", "pages/8_Inbox_Agent.py", "08")],
 }
 
 STYLE = """

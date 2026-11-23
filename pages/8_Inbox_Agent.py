@@ -6,10 +6,12 @@ import os
 import streamlit as st
 from core.agent import AcademicAgent
 from core.mcp_gmail import GmailMCPClient
-from core.ui import render_header
+from core.ui import configure_page, page_header
 
-render_header(
-    "Inbox Agent",
+configure_page("Inbox Agent", "✉️")
+page_header(
+    "08 / AGENT",
+    "Inbox Agent & MCP",
     "Autonomous agent with Gmail MCP email tools, lecture retrieval, and study material synthesis.",
 )
 
