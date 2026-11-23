@@ -6,3 +6,9 @@ __pycache__/
 data/*
 !data/.gitkeep
 PROJECT_DOCUMENTATION.zip
+credentials.json
+token.json
+gmail_token.json
+*.token
+node_modules/
+dist/

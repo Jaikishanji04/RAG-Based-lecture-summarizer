@@ -52,7 +52,7 @@ def _install_transformers_optional_dependency_shim() -> None:
 def get_embedding_model() -> Any:
     """Load the configured sentence-transformer once per process."""
 
-    model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+    model_name = os.getenv("HF_EMBED_MODEL") or os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
     try:
         from sentence_transformers import SentenceTransformer
         return SentenceTransformer(model_name)

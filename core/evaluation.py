@@ -46,6 +46,39 @@ def records_from_quiz(quiz: QuizSet, chunk_records: list[dict[str, Any]]) -> lis
     ]
 
 
+def _get_ragas_llm_and_embeddings() -> tuple[Any, Any]:
+    """Provide Hugging Face backed LLM and embeddings for RAGAS metrics."""
+    hf_token = os.getenv("HF_TOKEN", "")
+    base_url = os.getenv("HF_BASE_URL", "https://router.huggingface.co/hf-inference/v1")
+    chat_model = os.getenv("HF_CHAT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+    embed_model = os.getenv("HF_EMBED_MODEL") or os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+
+    llm = None
+    embeddings = None
+
+    try:
+        from langchain_openai import ChatOpenAI
+
+        if hf_token:
+            llm = ChatOpenAI(
+                base_url=base_url,
+                api_key=hf_token,
+                model=chat_model,
+                temperature=0.0,
+            )
+    except Exception:
+        pass
+
+    try:
+        from langchain_community.embeddings import HuggingFaceEmbeddings
+
+        embeddings = HuggingFaceEmbeddings(model_name=embed_model)
+    except Exception:
+        pass
+
+    return llm, embeddings
+
+
 def evaluate_with_ragas(records: list[EvaluationRecord]) -> EvaluationResult:
     """Run RAGAS faithfulness, context precision, and context recall metrics."""
 
@@ -63,9 +96,17 @@ def evaluate_with_ragas(records: list[EvaluationRecord]) -> EvaluationResult:
 
     dataset = Dataset.from_list([record.model_dump() for record in records])
     try:
+        eval_kwargs: dict[str, Any] = {}
+        llm, embeddings = _get_ragas_llm_and_embeddings()
+        if llm is not None:
+            eval_kwargs["llm"] = llm
+        if embeddings is not None:
+            eval_kwargs["embeddings"] = embeddings
+
         result = evaluate(
             dataset,
             metrics=[faithfulness, context_precision, context_recall],
+            **eval_kwargs,
         )
         if hasattr(result, "to_pandas"):
             frame = result.to_pandas()
