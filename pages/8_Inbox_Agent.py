@@ -41,6 +41,9 @@ with c3:
     st.info(f"Max Agent Steps: {os.getenv('MCP_MAX_AGENT_STEPS', '8')}")
 
 if not gmail_status["authenticated"] and gmail_status["credentials_present"]:
+    st.info("💡 **Recommended:** To complete Google Login cleanly without browser popup blockers, open PowerShell in this folder and run:")
+    st.code("py scripts/auth_gmail.py", language="powershell")
+    st.markdown("Or try connecting in this browser:")
     if st.button("Connect Gmail Account (OAuth)"):
         with st.spinner("Opening Google login in your default browser..."):
             try:
