@@ -11,16 +11,15 @@ from core.ingestion import load_lectures
 
 
 NAVIGATION = {
-    "INTAKE": [("Upload", "pages/1_Upload_and_Process.py", "01")],
     "STUDY": [
-        ("Player", "pages/2_Lecture_Player.py", "02"),
-        ("Quiz", "pages/3_Quiz.py", "03"),
-        ("Ask", "pages/4_Ask_Lecture_QA.py", "04"),
-        ("Concept Graph", "pages/5_Concept_Graph.py", "05"),
+        ("Player", "pages/2_Lecture_Player.py", "01"),
+        ("Quiz", "pages/3_Quiz.py", "02"),
+        ("Ask", "pages/4_Ask_Lecture_QA.py", "03"),
+        ("Concept Graph", "pages/5_Concept_Graph.py", "04"),
     ],
-    "OUTPUT": [("Export", "pages/6_Export.py", "06")],
-    "QUALITY": [("Evaluation", "pages/7_Evaluation.py", "07")],
-    "AGENT": [("Inbox Agent", "pages/8_Inbox_Agent.py", "08")],
+    "OUTPUT": [("Export", "pages/6_Export.py", "05")],
+    "QUALITY": [("Evaluation", "pages/7_Evaluation.py", "06")],
+    "AGENT": [("Inbox Agent", "pages/8_Inbox_Agent.py", "07")],
 }
 
 STYLE = """
@@ -115,8 +114,6 @@ def _render_sidebar() -> None:
                             st.switch_page("pages/2_Lecture_Player.py")
                     else:
                         st.caption(f"{icon} {title}")
-                        if st.button("Manage in Upload", key=f"sidebar-manage-{lecture_id}", use_container_width=True):
-                            st.switch_page("pages/1_Upload_and_Process.py")
         title = next(iter(lectures.values())).get("title", "No lecture loaded") if lectures else "No lecture loaded"
         state = "Ready to study" if lectures else "Upload a lecture to begin"
         st.markdown(
