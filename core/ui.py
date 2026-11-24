@@ -11,15 +11,12 @@ from core.ingestion import load_lectures
 
 
 NAVIGATION = {
-    "STUDY": [
-        ("Player", "pages/2_Lecture_Player.py", "01"),
-        ("Quiz", "pages/3_Quiz.py", "02"),
-        ("Ask", "pages/4_Ask_Lecture_QA.py", "03"),
-        ("Concept Graph", "pages/5_Concept_Graph.py", "04"),
+    "WORKBENCH": [
+        ("Study Workspace", "pages/2_Lecture_Player.py", "01"),
     ],
-    "OUTPUT": [("Export", "pages/6_Export.py", "05")],
-    "QUALITY": [("Evaluation", "pages/7_Evaluation.py", "06")],
-    "AGENT": [("Inbox Agent", "pages/8_Inbox_Agent.py", "07")],
+    "AGENT": [
+        ("Inbox Agent", "pages/8_Inbox_Agent.py", "02"),
+    ],
 }
 
 STYLE = """

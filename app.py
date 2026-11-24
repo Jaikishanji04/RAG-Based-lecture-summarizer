@@ -27,7 +27,7 @@ if lectures:
     with c: stat_card("Chunks", lecture.get("index", {}).get("chunk_count", "—"))
     col_act1, col_act2 = st.columns(2)
     with col_act1:
-        if st.button("Open Lecture Player", type="primary", use_container_width=True):
+        if st.button("Open Study Workspace", type="primary", use_container_width=True):
             st.switch_page("pages/2_Lecture_Player.py")
     with col_act2:
         if st.button("Open Inbox Agent (Gmail & MCP)", type="secondary", use_container_width=True):
