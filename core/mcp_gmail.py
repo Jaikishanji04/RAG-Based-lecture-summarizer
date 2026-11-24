@@ -77,15 +77,23 @@ class GmailMCPClient:
         return self.credentials_path.exists()
 
     def is_authenticated(self) -> bool:
-        """Check if an active token file exists and is valid."""
+        """Check if an active token file exists and is valid, refreshing if expired."""
         if not self.token_path.exists():
             return False
         try:
             from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request
 
             creds = Credentials.from_authorized_user_file(
                 str(self.token_path), READONLY_SCOPES
             )
+            if creds and creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                    self.token_path.write_text(creds.to_json(), encoding="utf-8")
+                except Exception as exc:
+                    logger.warning("Could not auto-refresh expired token: %s", exc)
+
             return bool(creds and creds.valid)
         except Exception:
             return False
@@ -233,10 +241,14 @@ class GmailMCPClient:
             raise GmailServiceError(f"Gmail search failed: {exc}") from exc
 
     def get_unread_emails_today(self, max_results: int = 5) -> List[EmailMessage]:
-        """Fetch unread emails received in the last 24 hours."""
+        """Fetch unread emails received recently (today or latest unread)."""
         today = datetime.date.today().strftime("%Y/%m/%d")
         query = f"is:unread after:{today}"
-        return self.search_emails(query=query, max_results=max_results)
+        msgs = self.search_emails(query=query, max_results=max_results)
+        if not msgs:
+            # Fallback to recent unread emails across the inbox
+            msgs = self.search_emails(query="is:unread", max_results=max_results)
+        return msgs
 
     def get_thread(self, thread_id: str) -> List[EmailMessage]:
         """Retrieve all messages in a specific email conversation thread."""
@@ -253,3 +265,15 @@ class GmailMCPClient:
         except Exception as exc:
             logger.exception("Gmail API thread retrieval failed")
             raise GmailServiceError(f"Failed to fetch thread '{thread_id}': {exc}") from exc
+
+
+_default_gmail_client: Optional[GmailMCPClient] = None
+
+
+def get_gmail_connector() -> GmailMCPClient:
+    """Return the shared GmailMCPClient singleton."""
+    global _default_gmail_client
+    if _default_gmail_client is None:
+        _default_gmail_client = GmailMCPClient()
+    return _default_gmail_client
+

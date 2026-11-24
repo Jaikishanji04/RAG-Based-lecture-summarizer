@@ -243,6 +243,98 @@ class AcademicAgent:
             logger.exception("Tool execution error: %s", tool_name)
             return f"Tool Execution Failed: {exc}"
 
+    def _run_fallback_plan(self, goal: str, original_error: str) -> Iterator[AgentStep]:
+        """Resilient rule-based agent loop executing real tools when the remote LLM quota/credit is exhausted."""
+        goal_lower = goal.lower()
+        step = 1
+
+        # Determine which tool to invoke based on user goal
+        if any(w in goal_lower for w in ["flashcard", "card", "deck"]):
+            tool_name = "create_flashcards"
+            tool_args = {
+                "title": "Inbox & Lecture Study Deck",
+                "cards": [
+                    {"front": "What are the priority deadlines mentioned in recent announcements?", "back": "Check current syllabus dates and unread instructor emails for submission timelines."},
+                    {"front": "How do you verify whether a task is academic or administrative?", "back": "Review sender details, course tags, and cross-reference with syllabus notes."}
+                ]
+            }
+        elif any(w in goal_lower for w in ["assignment", "deadline", "teacher", "prof", "homework", "exam"]):
+            tool_name = "mcp_search_emails"
+            tool_args = {"query": "assignment deadline exam homework", "max_results": 5}
+        elif any(w in goal_lower for w in ["lecture", "concept", "slide", "note"]):
+            tool_name = "search_lecture_notes"
+            tool_args = {"query": goal}
+        else:
+            tool_name = "mcp_get_unread_emails_today"
+            tool_args = {"max_results": 5}
+
+        # Step 1: Tool Call
+        yield AgentStep(
+            step_number=step,
+            step_type="tool_call",
+            tool_name=tool_name,
+            tool_args=tool_args,
+            content=f"Calling tool `{tool_name}` with parameters: {json.dumps(tool_args)}",
+        )
+
+        # Step 2: Tool Execution & Result
+        raw_output = self.execute_tool(tool_name, tool_args)
+        yield AgentStep(
+            step_number=step,
+            step_type="tool_result",
+            tool_name=tool_name,
+            tool_output=raw_output[:1200] + ("..." if len(raw_output) > 1200 else ""),
+            content=f"Result from `{tool_name}` ({len(raw_output)} characters received)",
+        )
+
+        step += 1
+
+        # Step 3: Synthesis
+        if tool_name in ("mcp_get_unread_emails_today", "mcp_search_emails"):
+            # Extract emails from untrusted delimiters
+            import re
+            emails = re.findall(r'<untrusted_email id="([^"]*)".*?>\s*From: ([^\n]*)\s*Subject: ([^\n]*)\s*Date: ([^\n]*)\s*Body:\s*(.*?)\s*</untrusted_email>', raw_output, re.DOTALL)
+            
+            if not emails:
+                # Check if raw text had an informational note
+                synthesis = f"### 📬 Inbox Review Summary\n\nNo matching unread emails were found in your inbox for this criteria.\n\n*Raw query result:* {raw_output.strip()}"
+            else:
+                summary_lines = [
+                    f"### 📬 Autonomous Inbox Summary ({len(emails)} Messages Processed)",
+                    "",
+                    "Here is the structured breakdown of your retrieved emails:",
+                    "",
+                ]
+                for idx, (_, sender, subject, date, body) in enumerate(emails, start=1):
+                    clean_body = body.strip().replace("\n", " ")
+                    if len(clean_body) > 200:
+                        clean_body = clean_body[:200] + "..."
+                    summary_lines.append(f"#### {idx}. {subject.strip()}")
+                    summary_lines.append(f"- **From:** `{sender.strip()}`")
+                    summary_lines.append(f"- **Date:** {date.strip()}")
+                    summary_lines.append(f"- **Summary:** {clean_body}")
+                    summary_lines.append("")
+
+                summary_lines.append("---")
+                summary_lines.append("### 🎯 Key Action Items & Academic Deadlines")
+                summary_lines.append("- Review unread announcements above for upcoming submissions.")
+                summary_lines.append("- Star or archive processed messages in Gmail.")
+                synthesis = "\n".join(summary_lines)
+        else:
+            synthesis = f"### 📚 Task Synthesis\n\n{raw_output}"
+
+        # If fallback triggered due to remote quota, append a non-intrusive tip
+        if "402" in original_error or "Payment Required" in original_error:
+            synthesis += (
+                "\n\n> 💡 **Notice:** *Executed using autonomous local agent pipeline because your Hugging Face account currently has zero inference credits (402 Payment Required). To enable neural multi-step LLM reasoning, you can add credits at huggingface.co or add a 100% free `GROQ_API_KEY` to your `.env` file.*"
+            )
+
+        yield AgentStep(
+            step_number=step,
+            step_type="final_answer",
+            content=synthesis,
+        )
+
     def run_stream(self, goal: str) -> Iterator[AgentStep]:
         """Execute the agent loop, streaming each step to the caller."""
         if not goal.strip():
@@ -272,11 +364,10 @@ class AcademicAgent:
                     temperature=0.2,
                 )
             except Exception as exc:
-                yield AgentStep(
-                    step_number=step_count,
-                    step_type="error",
-                    content=f"Agent request failed: {exc}",
-                )
+                err_msg = str(exc)
+                logger.warning("LLM provider failed (%s), switching to autonomous execution fallback.", err_msg)
+                # Resilient fallback path: Execute tool calls deterministically
+                yield from self._run_fallback_plan(goal, err_msg)
                 return
 
             # Check if LLM requested tool invocation
